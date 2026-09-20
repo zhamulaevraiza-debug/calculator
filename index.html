@@ -130,99 +130,206 @@
   const exprEl = document.getElementById("expr");
   const resultEl = document.getElementById("result");
 
-  let current = "0";
-  let expression = "";
+  const SYMBOLS = { "+": "+", "-": "−", "*": "×", "/": "÷", "%": "%" };
 
-  function render() {
-    exprEl.textContent = expression || "\u00a0";
-    resultEl.textContent = current;
+  let display = "0";        // то, что набрано/показано сейчас
+  let first = null;         // первый операнд (число)
+  let operator = null;      // текущий оператор
+  let waitingSecond = false;// ждём второй операнд
+  let lastOp = null;        // для повторного "="
+  let lastSecond = null;    // для повторного "="
+  let justEvaluated = false;
+
+  function fmt(n) {
+    if (!isFinite(n)) return "Ошибка";
+    if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n);
+    // убираем хвосты плавающей точки
+    let s = String(parseFloat(n.toPrecision(12)));
+    if (Math.abs(n) >= 1e15) s = n.toExponential(6);
+    return s;
   }
 
-  function clearAll() {
-    current = "0";
-    expression = "";
+  function render() {
+    resultEl.textContent = display;
+  }
+
+  function showExpr(text) {
+    exprEl.textContent = text || "\u00a0";
+  }
+
+  function reset() {
+    display = "0";
+    first = null;
+    operator = null;
+    waitingSecond = false;
+    lastOp = null;
+    lastSecond = null;
+    justEvaluated = false;
+    showExpr("");
     render();
   }
 
-  function input(value) {
-    if ("0123456789.".includes(value)) {
-      if (value === "." && current.includes(".")) return;
-      if (current === "0" && value !== ".") {
-        current = value;
-      } else {
-        current += value;
-      }
+  function inputDigit(d) {
+    if (justEvaluated) {           // после "=" новое число начинает новое выражение
+      reset();
+    }
+    if (waitingSecond) {
+      display = d;
+      waitingSecond = false;
+    } else {
+      display = display === "0" ? d : display + d;
+    }
+    render();
+  }
+
+  function inputDot() {
+    if (justEvaluated) {
+      reset();
+    }
+    if (waitingSecond) {
+      display = "0.";
+      waitingSecond = false;
       render();
       return;
     }
-    if ("+-*/%".includes(value)) {
-      if (expression === "" && current !== "0") {
-        expression = current;
-      } else if (expression !== "") {
-        try {
-          current = String(evaluate(expression + current));
-        } catch {
-          current = "Ошибка";
-        }
-      }
-      expression = current + " " + value;
-      current = "0";
-      render();
+    if (!display.includes(".")) display += ".";
+    render();
+  }
+
+  function inputOperator(nextOp) {
+    justEvaluated = false;
+    const value = parseFloat(display);
+
+    // нажали оператор, ещё не набрав второй операнд — просто меняем оператор
+    if (operator && waitingSecond) {
+      operator = nextOp;
+      showExpr(fmt(first) + " " + SYMBOLS[nextOp]);
       return;
     }
-    if (value === "=") {
-      try {
-        const result = evaluate(expression + current);
-        expression = expression + current + " =";
-        current = String(result);
-      } catch {
-        current = "Ошибка";
-        expression = "";
-      }
-      render();
-      return;
+
+    if (first === null) {
+      first = value;
+    } else if (operator) {
+      const result = compute(first, value, operator);
+      if (result === null) return;       // ошибка уже показана
+      first = result;
+      display = fmt(result);
     }
-    if (value === "back") {
-      if (current.length > 1) {
-        current = current.slice(0, -1);
-      } else {
-        current = "0";
-      }
-      render();
-      return;
+
+    operator = nextOp;
+    waitingSecond = true;
+    showExpr(fmt(first) + " " + SYMBOLS[nextOp]);
+    render();
+  }
+
+  function compute(a, b, op) {
+    let result;
+    switch (op) {
+      case "+": result = a + b; break;
+      case "-": result = a - b; break;
+      case "*": result = a * b; break;
+      case "/":
+        if (b === 0) { showError(); return null; }
+        result = a / b;
+        break;
+      case "%":
+        if (b === 0) { showError(); return null; }
+        result = a % b;
+        break;
+      default: return b;
     }
-    if (value === "C") {
-      clearAll();
+    return result;
+  }
+
+  function inputPercent() {
+    // процент от операнда: 200 + 10% => 220
+    let value = parseFloat(display);
+    if (first !== null && operator) {
+      value = first * value / 100;
+    } else {
+      value = value / 100;
+    }
+    display = fmt(value);
+    render();
+  }
+
+  function inputEquals() {
+    const value = parseFloat(display);
+
+    if (operator && !waitingSecond) {
+      // обычное "="
+      const op = operator;
+      const a = first;
+      const b = value;
+      const result = compute(a, b, op);
+      if (result === null) return;
+      showExpr(fmt(a) + " " + SYMBOLS[op] + " " + fmt(b) + " =");
+      display = fmt(result);
+      first = result;
+      lastOp = op;
+      lastSecond = b;
+      operator = null;
+      waitingSecond = true;
+      justEvaluated = true;
+      render();
+    } else if (lastOp !== null && lastSecond !== null) {
+      // повторное "=": применяем последнюю операцию ещё раз
+      const result = compute(first, lastSecond, lastOp);
+      if (result === null) return;
+      showExpr(fmt(first) + " " + SYMBOLS[lastOp] + " " + fmt(lastSecond) + " =");
+      display = fmt(result);
+      first = result;
+      justEvaluated = true;
+      render();
+    } else {
+      showExpr(fmt(value) + " =");
+      display = fmt(value);
+      first = value;
+      justEvaluated = true;
+      render();
     }
   }
 
-  function evaluate(str) {
-    const sanitized = str.replace(/\s+/g, "").replace(/%/g, "/100");
-    if (!/^[0-9+\-*/().]+$/.test(sanitized)) throw new Error("invalid");
-    // безопасное вычисление без eval
-    return Function('"use strict";return (' + sanitized + ')')();
+  function showError() {
+    display = "Ошибка";
+    showExpr("");
+    first = null;
+    operator = null;
+    waitingSecond = true;
+    justEvaluated = true;
+    render();
+  }
+
+  function inputBackspace() {
+    if (waitingSecond || justEvaluated) return;
+    display = display.length > 1 ? display.slice(0, -1) : "0";
+    render();
+  }
+
+  function handle(key) {
+    if ("0123456789".includes(key)) return inputDigit(key);
+    if (key === ".") return inputDot();
+    if ("+-*/".includes(key)) return inputOperator(key);
+    if (key === "%") return inputPercent();
+    if (key === "=") return inputEquals();
+    if (key === "back") return inputBackspace();
+    if (key === "C") return reset();
   }
 
   document.querySelectorAll("button").forEach((btn) => {
-    btn.addEventListener("click", () => input(btn.dataset.k));
+    btn.addEventListener("click", () => handle(btn.dataset.k));
   });
 
   document.addEventListener("keydown", (e) => {
-    const map = {
-      "Enter": "=",
-      "=": "=",
-      "Backspace": "back",
-      "Escape": "C",
-      ",": ".",
-    };
+    const map = { "Enter": "=", "=": "=", "Backspace": "back", "Escape": "C", ",": "." };
     const key = map[e.key] ?? e.key;
     if ("0123456789.+-*/%".includes(key) || ["=", "back", "C"].includes(key)) {
       e.preventDefault();
-      input(key);
+      handle(key);
     }
   });
 
-  render();
+  reset();
 </script>
 </body>
 </html>
