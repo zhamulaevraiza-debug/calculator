@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Калькулятор</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --display: #1a1d27;
+    --btn: #232734;
+    --btn-hover: #2e3444;
+    --accent: #4f8cff;
+    --accent-hover: #3b74e0;
+    --text: #e8eaf0;
+    --muted: #8a91a5;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 0%, #1b2030, var(--bg) 70%);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    padding: 16px;
+  }
+
+  .calc {
+    width: 340px;
+    background: var(--display);
+    border-radius: 24px;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  .screen {
+    background: var(--bg);
+    border-radius: 16px;
+    padding: 18px 16px;
+    text-align: right;
+    margin-bottom: 16px;
+    min-height: 92px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .expr {
+    color: var(--muted);
+    font-size: 15px;
+    min-height: 20px;
+    word-break: break-all;
+  }
+
+  .result {
+    color: var(--text);
+    font-size: 34px;
+    font-weight: 600;
+    word-break: break-all;
+    line-height: 1.2;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  button {
+    height: 60px;
+    border: none;
+    border-radius: 14px;
+    font-size: 20px;
+    color: var(--text);
+    background: var(--btn);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+  }
+
+  button:hover { background: var(--btn-hover); }
+  button:active { transform: scale(0.96); }
+
+  button.op { background: #2b3452; }
+  button.op:hover { background: #354061; }
+
+  button.eq { background: var(--accent); grid-column: span 2; }
+  button.eq:hover { background: var(--accent-hover); }
+
+  button.fn { color: var(--muted); }
+  button.fn:hover { background: var(--btn-hover); }
+</style>
+</head>
+<body>
+  <div class="calc">
+    <div class="screen">
+      <div class="expr" id="expr">&nbsp;</div>
+      <div class="result" id="result">0</div>
+    </div>
+    <div class="grid">
+      <button class="fn" data-k="C">C</button>
+      <button class="fn" data-k="back">⌫</button>
+      <button class="fn" data-k="%">%</button>
+      <button class="op" data-k="/">÷</button>
+
+      <button data-k="7">7</button>
+      <button data-k="8">8</button>
+      <button data-k="9">9</button>
+      <button class="op" data-k="*">×</button>
+
+      <button data-k="4">4</button>
+      <button data-k="5">5</button>
+      <button data-k="6">6</button>
+      <button class="op" data-k="-">−</button>
+
+      <button data-k="1">1</button>
+      <button data-k="2">2</button>
+      <button data-k="3">3</button>
+      <button class="op" data-k="+">+</button>
+
+      <button data-k="0">0</button>
+      <button data-k=".">.</button>
+      <button class="eq" data-k="=">=</button>
+    </div>
+  </div>
+
+<script>
+  const exprEl = document.getElementById("expr");
+  const resultEl = document.getElementById("result");
+
+  let current = "0";
+  let expression = "";
+
+  function render() {
+    exprEl.textContent = expression || "\u00a0";
+    resultEl.textContent = current;
+  }
+
+  function clearAll() {
+    current = "0";
+    expression = "";
+    render();
+  }
+
+  function input(value) {
+    if ("0123456789.".includes(value)) {
+      if (value === "." && current.includes(".")) return;
+      if (current === "0" && value !== ".") {
+        current = value;
+      } else {
+        current += value;
+      }
+      render();
+      return;
+    }
+    if ("+-*/%".includes(value)) {
+      if (expression === "" && current !== "0") {
+        expression = current;
+      } else if (expression !== "") {
+        try {
+          current = String(evaluate(expression + current));
+        } catch {
+          current = "Ошибка";
+        }
+      }
+      expression = current + " " + value;
+      current = "0";
+      render();
+      return;
+    }
+    if (value === "=") {
+      try {
+        const result = evaluate(expression + current);
+        expression = expression + current + " =";
+        current = String(result);
+      } catch {
+        current = "Ошибка";
+        expression = "";
+      }
+      render();
+      return;
+    }
+    if (value === "back") {
+      if (current.length > 1) {
+        current = current.slice(0, -1);
+      } else {
+        current = "0";
+      }
+      render();
+      return;
+    }
+    if (value === "C") {
+      clearAll();
+    }
+  }
+
+  function evaluate(str) {
+    const sanitized = str.replace(/\s+/g, "").replace(/%/g, "/100");
+    if (!/^[0-9+\-*/().]+$/.test(sanitized)) throw new Error("invalid");
+    // безопасное вычисление без eval
+    return Function('"use strict";return (' + sanitized + ')')();
+  }
+
+  document.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => input(btn.dataset.k));
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const map = {
+      "Enter": "=",
+      "=": "=",
+      "Backspace": "back",
+      "Escape": "C",
+      ",": ".",
+    };
+    const key = map[e.key] ?? e.key;
+    if ("0123456789.+-*/%".includes(key) || ["=", "back", "C"].includes(key)) {
+      e.preventDefault();
+      input(key);
+    }
+  });
+
+  render();
+</script>
+</body>
+</html>
