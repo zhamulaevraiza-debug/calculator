@@ -10,4 +10,4 @@
 ## Запуск
 Открой `index.html` в браузере, либо перейди по ссылке GitHub Pages:
 
-https://zhamulaevraza-debug.github.io/calculator/
+https://zhamulaevraiza-debug.github.io/calculator/
